@@ -1,0 +1,44 @@
+# overlay/usr/local/bin/sync-home
+#!/bin/sh
+echo "=== SYNC HOME DEBUG START ===" >> /tmp/sync-home.log
+date >> /tmp/sync-home.log
+
+# Check if encrypted partition is available
+if [ ! -b /dev/mapper/persistent-crypt ]; then
+    echo "Encrypted storage not unlocked. Run 'unlock-storage' first." >> /tmp/sync-home.log
+    echo "Encrypted storage not unlocked. Run 'unlock-storage' first."
+    exit 1
+fi
+
+# Check if sync mount is available
+if [ ! -d "/home/anon/.persistent-sync" ] || ! mountpoint -q /home/anon/.persistent-sync; then
+    echo "Reconnecting to encrypted storage..." >> /tmp/sync-home.log
+    echo "Reconnecting to encrypted storage..."
+    sudo mkdir -p /mnt/persistent
+    sudo mount /dev/mapper/persistent-crypt /mnt/persistent 2>/dev/null
+    sudo chown -R anon:anon /mnt/persistent
+    mkdir -p /home/anon/.persistent-sync
+    sudo mount --bind /mnt/persistent /home/anon/.persistent-sync
+    sudo chown -R anon:anon /home/anon/.persistent-sync
+fi
+
+if [ -d "/home/anon/.persistent-sync" ] && mountpoint -q /home/anon/.persistent-sync; then
+    echo "Syncing home directory to encrypted storage..." >> /tmp/sync-home.log
+    echo "Syncing home directory to encrypted storage..."
+    
+    # Use rsync to sync files, excluding the sync mount itself
+    rsync -av /home/anon/ /home/anon/.persistent-sync/ \
+        --exclude='.persistent-sync' \
+        --exclude='.cache' \
+        --exclude='.tmp' \
+        --exclude='persistent' 2>>/tmp/sync-home.log || true
+    
+    echo "Sync complete!" >> /tmp/sync-home.log
+    echo "Sync complete!"
+else
+    echo "Encrypted storage mount failed - check unlock-storage" >> /tmp/sync-home.log
+    echo "Encrypted storage mount failed - check 'unlock-storage'"
+    exit 1
+fi
+
+echo "=== SYNC HOME DEBUG END ===" >> /tmp/sync-home.log

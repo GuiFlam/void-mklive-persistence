@@ -1,0 +1,71 @@
+# overlay/usr/local/bin/unlock-storage
+#!/bin/sh
+echo "=== UNLOCK STORAGE DEBUG START ===" >> /tmp/unlock-storage.log
+date >> /tmp/unlock-storage.log
+
+if [ -b /dev/sda3 ]; then
+    echo "Found encrypted /dev/sda3" >> /tmp/unlock-storage.log
+    
+    # Check if already unlocked
+    if [ -b /dev/mapper/persistent-crypt ]; then
+        echo "Storage already unlocked!" >> /tmp/unlock-storage.log
+        echo "Encrypted storage is already unlocked."
+        
+        # Just setup the mount if not already done
+        if [ ! -d "/home/anon/.persistent-sync" ] || ! mountpoint -q /home/anon/.persistent-sync; then
+            echo "Setting up sync mount..." >> /tmp/unlock-storage.log
+            sudo mkdir -p /mnt/persistent
+            sudo mount /dev/mapper/persistent-crypt /mnt/persistent 2>/dev/null
+            sudo chown -R anon:anon /mnt/persistent
+            mkdir -p /home/anon/.persistent-sync
+            sudo mount --bind /mnt/persistent /home/anon/.persistent-sync
+            sudo chown -R anon:anon /home/anon/.persistent-sync
+            echo "Sync mount ready. Use 'sync-home' to save changes."
+        fi
+        return 0
+    fi
+    
+    echo "Setting up encrypted persistent home..."
+    # Prompt for decryption passphrase
+    echo "Enter passphrase for encrypted storage:"
+    sudo cryptsetup luksOpen /dev/sda3 persistent-crypt
+    
+    if [ $? -eq 0 ] && [ -b /dev/mapper/persistent-crypt ]; then
+        echo "Encryption unlocked successfully" >> /tmp/unlock-storage.log
+        # Mount the decrypted partition
+        sudo mkdir -p /mnt/persistent
+        sudo mount /dev/mapper/persistent-crypt /mnt/persistent
+        echo "Mount result: $?" >> /tmp/unlock-storage.log
+        
+        # Fix ownership
+        sudo chown -R anon:anon /mnt/persistent
+        
+        # Copy files to RAM (excluding any 'persistent' directory)
+        if [ -d "/mnt/persistent" ] && [ "$(ls -A /mnt/persistent)" ]; then
+            echo "Copying files..." >> /tmp/unlock-storage.log
+            rsync -av /mnt/persistent/ /home/anon/ --exclude='persistent' 2>>/tmp/unlock-storage.log || true
+            echo "Copy completed" >> /tmp/unlock-storage.log
+        fi
+        
+        # Fix ownership
+        sudo chown -R anon:anon /home/anon
+        
+        # Create bind mount for syncing
+        mkdir -p /home/anon/.persistent-sync
+        sudo mount --bind /mnt/persistent /home/anon/.persistent-sync
+        sudo chown -R anon:anon /home/anon/.persistent-sync
+        
+        echo "Encrypted home loaded. Use 'sync-home' to save changes."
+        echo "Setup complete" >> /tmp/unlock-storage.log
+    else
+        echo "Failed to unlock encryption" >> /tmp/unlock-storage.log
+        echo "Failed to unlock encrypted storage - continuing without persistence"
+        return 1
+    fi
+else
+    echo "/dev/sda3 not found" >> /tmp/unlock-storage.log
+    echo "Encrypted storage device /dev/sda3 not found"
+    return 1
+fi
+
+echo "=== UNLOCK STORAGE DEBUG END ===" >> /tmp/unlock-storage.log

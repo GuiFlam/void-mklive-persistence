@@ -1,0 +1,13 @@
+# overlay/etc/rc.local
+#!/bin/sh
+echo "=== RC.LOCAL DEBUG START ===" >> /tmp/rc-local.log
+date >> /tmp/rc-local.log
+
+# Just log that we're looking for encrypted storage
+if [ -b /dev/sda3 ]; then
+    echo "Found encrypted storage /dev/sda3 - will unlock after login" >> /tmp/rc-local.log
+else
+    echo "/dev/sda3 not found" >> /tmp/rc-local.log
+fi
+
+echo "=== RC.LOCAL DEBUG END ===" >> /tmp/rc-local.log
